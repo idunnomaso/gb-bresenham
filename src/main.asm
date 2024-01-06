@@ -82,7 +82,7 @@ Startup:
 	xor a, a
 	ldh [rVBK], a
 
-	call PrepLineDrawing
+	call InitLineDrawing
 
 	ld de, wShadowOam.end - wShadowOam
 	ld hl, wShadowOam
@@ -118,6 +118,12 @@ Startup:
 	ld c, 24
 	ld d, 159
 	ld e, 119
+	call DrawLine
+
+	ld b, 98
+	ld c, 54
+	ld d, 44
+	ld e, 73
 	call DrawLine
 
 MainLoop::

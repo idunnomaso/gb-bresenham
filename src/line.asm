@@ -1,5 +1,3 @@
-; line.asm
-
 INCLUDE "hardware.inc"
 
 /*
@@ -40,13 +38,20 @@ ENDM
 	\8 = increment two
 */
 MACRO draw_line
-	ld a, \5
 	srl \4
+
+	ld a, \5
 	sub a, \4
 	ld \6, a
 
 .loopPosition\@
+	push de
+	push hl
+
 	call DrawPixel
+
+	pop hl
+	pop de
 
 	bit 7, \6
 	jr nz, .isNegative\@
@@ -72,7 +77,6 @@ MACRO draw_line
 	cp a, \2
 	jr nz, .loopPosition\@
 
-	call DrawPixel
 	ret
 ENDM
 
@@ -85,124 +89,169 @@ ENDM
 
 SECTION "Line Drawing Functions", ROM0
 
-DrawLine::
-	get_delta b, d, h, wIncX
-	get_delta c, e, l, wIncY
-
-	ld a, h
-	cp a, l
-	jr c, .dyLonger
-
-	draw_line b, d, c, h, l, e, wIncX, wIncY
-
-.dyLonger
-	draw_line c, e, b, l, h, d, wIncY, wIncX
-
-DrawPixel::
-	push hl
-
-	ld a, b
-	and a, 7
-	ld l, a
-	ld h, HIGH(LineMaskLut)
-	ld a, [hl]
-	ld [wLineMask], a
-
-	ld a, c
-	sub a, 24
-	srl a
-	srl a
-	and a, 254
-
-	ld l, a
-	ld h, HIGH(TileRowLut)
-	ld a, [hli]
-	ld h, [hl]
-	ld l, a
-
-	ld a, b
-	rla
-	ld a, h
-	adc a, 0
-	ld h, a
-
-	ld a, b
-	rla
-	and a, 240
-	add a, l
-	ld l, a
-
-	ld a, h
-	adc a, 0
-	ld h, a
-
-	ld a, c
-	and a, 7
-	rla
-	or a, l
-	ld l, a
-
-	di
-	wait_stat
-	ld a, [wLineMask]
-	or a, [hl]
-	ld [hli], a
-	ld [hl], a
-	ei
-
-	pop hl
-	ret
-
-PrepLineDrawing::
-	ld b, 0
-	ld e, 12
-	ld hl, _SCRN0 + 96
+CopyTilemap:
+	ld e, 18
+	ld hl, _SCRN0
 
 .loopRows
-	ld c, 32
 	ld d, 20
 
 .loopColumns
-	ld [hl], b
-
-	ld a, 1
-	ldh [rVBK], a
-	xor a, a
+	di
+	wait_stat
+	ld a, [bc]
 	ld [hli], a
-	ldh [rVBK], a
+	ei
 
-	inc b
-	dec c
+	inc bc
 	dec d
 	jr nz, .loopColumns
 
-	ld a, b
-	ld b, 0
+	push bc
+	ld bc, 12
 	add hl, bc
-	ld b, a
+	pop bc
+
 	dec e
 	jr nz, .loopRows
 
 	ret
 
-SECTION "Line Mask Lookup Table", ROMX, ALIGN[8]
+DrawLine::
+	get_delta b, d, h, wXInc
+	get_delta c, e, l, wYInc
 
-LineMaskLut:
+	ld a, h
+	cp a, l
+	jr c, .dyLonger
+
+	draw_line b, d, c, h, l, e, wXInc, wYInc
+
+.dyLonger
+	draw_line c, e, b, l, h, d, wYInc, wXInc
+
+DrawPixel::
+	ld hl, YLut
+	ld d, 0
+	ld a, c
+	sub a, 24
+	ld e, a
+
+	add hl, de
+	add hl, de
+
+	ld a, [hli]
+	ld h, [hl]
+	ld l, a
+
+	ld a, b
+	and a, 248
+	ld e, a
+
+	add hl, de
+	add hl, de
+
+	ld a, b
+	and a, 7
+	ld e, a
+	ld d, HIGH(MaskLut)
+
+	di
+	wait_stat
+	ld a, [de]
+	or a, [hl]
+	ld [hli], a
+	ld [hl], a
+	ei
+
+	ret
+
+InitLineDrawing::
+	xor a, a
+	ldh [rSCX], a
+	ldh [rSCY], a
+
+	ld bc, LineTilemapBank0
+	call CopyTilemap
+
+	ld a, 1
+	ldh [rVBK], a
+
+	ld bc, LineTilemapBank1
+	call CopyTilemap
+
+	xor a, a
+	ldh [rVBK], a
+
+	ret
+
+SECTION "Line Drawing Tilemaps", ROMX
+
+LineTilemapBank0:
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0A, $0B, $0C, $0D, $0E, $0F, $10, $11, $12, $13
+	db $14, $15, $16, $17, $18, $19, $1A, $1B, $1C, $1D, $1E, $1F, $20, $21, $22, $23, $24, $25, $26, $27
+	db $28, $29, $2A, $2B, $2C, $2D, $2E, $2F, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $3A, $3B
+	db $3C, $3D, $3E, $3F, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $4A, $4B, $4C, $4D, $4E, $4F
+	db $50, $51, $52, $53, $54, $55, $56, $57, $58, $59, $5A, $5B, $5C, $5D, $5E, $5F, $60, $61, $62, $63
+	db $64, $65, $66, $67, $68, $69, $6A, $6B, $6C, $6D, $6E, $6F, $70, $71, $72, $73, $74, $75, $76, $77
+	db $78, $79, $7A, $7B, $7C, $7D, $7E, $7F, $80, $81, $82, $83, $84, $85, $86, $87, $88, $89, $8A, $8B
+	db $8C, $8D, $8E, $8F, $90, $91, $92, $93, $94, $95, $96, $97, $98, $99, $9A, $9B, $9C, $9D, $9E, $9F
+	db $A0, $A1, $A2, $A3, $A4, $A5, $A6, $A7, $A8, $A9, $AA, $AB, $AC, $AD, $AE, $AF, $B0, $B1, $B2, $B3
+	db $B4, $B5, $B6, $B7, $B8, $B9, $BA, $BB, $BC, $BD, $BE, $BF, $C0, $C1, $C2, $C3, $C4, $C5, $C6, $C7
+	db $C8, $C9, $CA, $CB, $CC, $CD, $CE, $CF, $D0, $D1, $D2, $D3, $D4, $D5, $D6, $D7, $D8, $D9, $DA, $DB
+	db $DC, $DD, $DE, $DF, $E0, $E1, $E2, $E3, $E4, $E5, $E6, $E7, $E8, $E9, $EA, $EB, $EC, $ED, $EE, $EF
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+LineTilemapBank1:
+	db $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08
+	db $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08
+	db $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+	db $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08
+	db $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08
+	db $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08, $08
+
+SECTION "Mask Lookup Table", ROMX, ALIGN[8]
+
+MaskLut:
 	db $80, $40, $20, $10, $08, $04, $02, $01
 
-SECTION "Tile Row Lookup Table", ROMX, ALIGN[8]
+SECTION "Y Lookup Table", ROMX
 
-TileRowLut:
-	dw $8000, $8140, $8280, $83C0, $8500, $8640, $8780, $88C0
-	dw $8A00, $8B40, $8C80, $8DC0
+YLut:
+	dw $8000, $8002, $8004, $8006, $8008, $800A, $800C, $800E
+	dw $8140, $8142, $8144, $8146, $8148, $814A, $814C, $814E
+	dw $8280, $8282, $8284, $8286, $8288, $828A, $828C, $828E
+	dw $83C0, $83C2, $83C4, $83C6, $83C8, $83CA, $83CC, $83CE
+	dw $8500, $8502, $8504, $8506, $8508, $850A, $850C, $850E
+	dw $8640, $8642, $8644, $8646, $8648, $864A, $864C, $864E
+	dw $8780, $8782, $8784, $8786, $8788, $878A, $878C, $878E
+	dw $88C0, $88C2, $88C4, $88C6, $88C8, $88CA, $88CC, $88CE
+	dw $8A00, $8A02, $8A04, $8A06, $8A08, $8A0A, $8A0C, $8A0E
+	dw $8B40, $8B42, $8B44, $8B46, $8B48, $8B4A, $8B4C, $8B4E
+	dw $8C80, $8C82, $8C84, $8C86, $8C88, $8C8A, $8C8C, $8C8E
+	dw $8DC0, $8DC2, $8DC4, $8DC6, $8DC8, $8DCA, $8DCC, $8DCE
 
 SECTION "Line Drawing Variables", WRAM0
 
-wIncX:
+wXInc:
 	db
 
-wIncY:
-	db
-
-wLineMask:
+wYInc:
 	db
