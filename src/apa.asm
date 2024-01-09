@@ -22,38 +22,29 @@ MACRO get_delta
 ENDM
 
 MACRO draw_line
-	srl \4
-
-	ld a, \5
-	sub a, \4
+	ld a, \4
+	srl a
 	ld \6, a
 
 .loopPosition\@
-	push de
-	push hl
-
 	call DrawPixel
 
-	pop hl
-	pop de
+	ld a, \6
+	sub a, \5
+	ld \6, a
 
 	bit 7, \6
-	jr nz, .isNegative\@
-
-	ld a, \6
-	sub a, \4
-	sub a, \4
-	ld \6, a
+	jr z, .isPositive\@
 
 	ld a, [\8]
 	add a, \3
 	ld \3, a
 
-.isNegative\@
 	ld a, \6
-	add a, \5
+	add a, \4
 	ld \6, a
 
+.isPositive\@
 	ld a, [\7]
 	add a, \1
 	ld \1, a
@@ -61,7 +52,7 @@ MACRO draw_line
 	cp a, \2
 	jr nz, .loopPosition\@
 
-	ret
+	call DrawPixel
 ENDM
 
 MACRO wait_stat
@@ -82,11 +73,16 @@ DrawLine::
 	jr c, .dyLonger
 
 	draw_line b, d, c, h, l, e, wXInc, wYInc
+	ret
 
 .dyLonger
 	draw_line c, e, b, l, h, d, wYInc, wXInc
+	ret
 
 DrawPixel::
+	push de
+	push hl
+
 	ld d, 0
 	ld e, c
 	ld hl, YLut
@@ -117,6 +113,9 @@ DrawPixel::
 	ld [hli], a
 	ld [hl], a
 	ei
+
+	pop hl
+	pop de
 
 	ret
 
